@@ -5,7 +5,7 @@ from flask import Flask, jsonify
 import threading
 from dotenv import load_dotenv
 
-load_dotenv()  # Carga las variables del archivo .env
+load_dotenv()  
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -15,6 +15,21 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 app = Flask(__name__)
 
 personajes = {}
+
+bot_connected = False
+
+@bot.event
+async def on_ready():
+    global bot_connected
+    bot_connected = True
+    print(f'Conectado como {bot.user.name} ({bot.user.id})')
+
+@bot.command()
+async def status(ctx):
+    if bot_connected:
+        await ctx.send("El bot está en línea.")
+    else:
+        await ctx.send("El bot está conectando...")
 
 @bot.command()
 async def crear(ctx, nombre: str):
