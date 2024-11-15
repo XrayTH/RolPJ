@@ -1,0 +1,76 @@
+# Python bytecode files
+__pycache__/
+*.py[cod]
+/ejemplo
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environment
+.env
+venv/
+ENV/
+env/
+venv.bak/
+venv3/
+__pypackages__/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+
+# Jupyter Notebook files
+.ipynb_checkpoints/
+
+# Python-specific
+*.log
+*.pot
+*.pyc
+*.pyo
+*.pyd
+.Python-version
+
+# Coverage reports
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+*.coveragerc
+
+# Pytest
+.cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# flake8
+.flake8
+
+# PyCharm
+.idea/
+
+# VSCode
+.vscode/
