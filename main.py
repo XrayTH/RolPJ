@@ -4,8 +4,15 @@ from discord.ext import commands
 from flask import Flask, jsonify
 import threading
 from dotenv import load_dotenv
+from pymongo import MongoClient
 
-load_dotenv()  
+load_dotenv()
+
+# Configurar MongoDB
+mongo_uri = os.getenv("MONGO_URI")
+client = MongoClient(mongo_uri)
+db = client['RolPJ']
+collection = db['personajes']
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -13,8 +20,6 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 app = Flask(__name__)
-
-personajes = {}
 
 bot_connected = False
 
@@ -35,7 +40,7 @@ async def status(ctx):
 async def crear(ctx, nombre: str):
     try:
         personaje = {'nombre': nombre}
-        personajes[nombre.lower()] = personaje
+        collection.insert_one(personaje)
         await ctx.send(f"Personaje {nombre} creado.")
     except Exception as e:
         await ctx.send(f"Ocurrió un error al crear el personaje: {e}")
@@ -43,14 +48,14 @@ async def crear(ctx, nombre: str):
 @bot.command()
 async def añadir(ctx, nombre: str, nombre_atributo: str, tipo_atributo: str):
     try:
-        nombre = nombre.lower()
-        if nombre not in personajes:
+        personaje = collection.find_one({"nombre": nombre})
+        if not personaje:
             await ctx.send(f"El personaje {nombre} no existe.")
             return
 
         tipo_atributo = tipo_atributo.lower()
         partes = nombre_atributo.split('.')
-        valor = personajes[nombre]
+        valor = personaje
 
         for i, parte in enumerate(partes):
             if isinstance(valor, dict):
@@ -70,6 +75,7 @@ async def añadir(ctx, nombre: str, nombre_atributo: str, tipo_atributo: str):
                 await ctx.send(f"No se puede acceder al atributo {nombre_atributo} porque no es un objeto.")
                 return
 
+        collection.update_one({"nombre": nombre}, {"$set": personaje})
         await ctx.send(f"Atributo {nombre_atributo} de tipo {tipo_atributo} añadido al personaje {nombre}.")
     except Exception as e:
         await ctx.send(f"Ocurrió un error al añadir el atributo: {e}")
@@ -77,15 +83,14 @@ async def añadir(ctx, nombre: str, nombre_atributo: str, tipo_atributo: str):
 @bot.command()
 async def ver(ctx, nombre: str, nombre_atributo: str = None):
     try:
-        nombre = nombre.lower()
-
-        if nombre not in personajes:
+        personaje = collection.find_one({"nombre": nombre})
+        if not personaje:
             await ctx.send(f"El personaje {nombre} no existe.")
             return
 
         if nombre_atributo:
             partes = nombre_atributo.split('.')
-            valor = personajes[nombre]
+            valor = personaje
 
             for parte in partes:
                 if isinstance(valor, dict) and parte in valor:
@@ -97,8 +102,9 @@ async def ver(ctx, nombre: str, nombre_atributo: str = None):
             await ctx.send(f"Atributo {nombre_atributo}: {valor}")
         else:
             personaje_info = f"Personaje: {nombre}\n"
-            for atributo, valor in personajes[nombre].items():
-                personaje_info += f"- {atributo}: {valor}\n"
+            for atributo, valor in personaje.items():
+                if atributo != '_id':
+                    personaje_info += f"- {atributo}: {valor}\n"
             await ctx.send(personaje_info)
     except Exception as e:
         await ctx.send(f"Ocurrió un error al visualizar el personaje o atributo: {e}")
@@ -106,20 +112,20 @@ async def ver(ctx, nombre: str, nombre_atributo: str = None):
 @bot.command()
 async def borrar(ctx, nombre: str, nombre_atributo: str = None):
     try:
-        nombre = nombre.lower()
-
-        if nombre not in personajes:
+        personaje = collection.find_one({"nombre": nombre})
+        if not personaje:
             await ctx.send(f"El personaje {nombre} no existe.")
             return
 
         if nombre_atributo:
             partes = nombre_atributo.split('.')
-            valor = personajes[nombre]
+            valor = personaje
 
             for i, parte in enumerate(partes):
                 if isinstance(valor, dict) and parte in valor:
                     if i == len(partes) - 1:
                         del valor[parte]
+                        collection.update_one({"nombre": nombre}, {"$set": personaje})
                         await ctx.send(f"Atributo {nombre_atributo} borrado del personaje {nombre}.")
                         return
                     valor = valor[parte]
@@ -127,7 +133,7 @@ async def borrar(ctx, nombre: str, nombre_atributo: str = None):
                     await ctx.send(f"El atributo {nombre_atributo} no existe en el personaje {nombre}.")
                     return
         else:
-            del personajes[nombre]
+            collection.delete_one({"nombre": nombre})
             await ctx.send(f"Personaje {nombre} borrado.")
     except Exception as e:
         await ctx.send(f"Ocurrió un error al borrar el personaje o atributo: {e}")
@@ -135,19 +141,19 @@ async def borrar(ctx, nombre: str, nombre_atributo: str = None):
 @bot.command()
 async def editar(ctx, nombre: str, nombre_atributo: str, nuevo_valor: str):
     try:
-        nombre = nombre.lower()
-
-        if nombre not in personajes:
+        personaje = collection.find_one({"nombre": nombre})
+        if not personaje:
             await ctx.send(f"El personaje {nombre} no existe.")
             return
 
         partes = nombre_atributo.split('.')
-        valor = personajes[nombre]
+        valor = personaje
 
         for i, parte in enumerate(partes):
             if isinstance(valor, dict) and parte in valor:
                 if i == len(partes) - 1:
                     valor[parte] = nuevo_valor
+                    collection.update_one({"nombre": nombre}, {"$set": personaje})
                     await ctx.send(f"Atributo {nombre_atributo} del personaje {nombre} actualizado a: {nuevo_valor}")
                     return
                 valor = valor[parte]
@@ -160,28 +166,26 @@ async def editar(ctx, nombre: str, nombre_atributo: str, nuevo_valor: str):
 @bot.command()
 async def verTodos(ctx):
     try:
-        if personajes:
-            all_personajes = "Personajes y sus atributos:\n"
-            for nombre, atributos in personajes.items():
-                all_personajes += f"ID: {nombre}\n"
-                for atributo, valor in atributos.items():
+        personajes = collection.find()
+        all_personajes = "Personajes y sus atributos:\n"
+        for personaje in personajes:
+            all_personajes += f"ID: {personaje['nombre']}\n"
+            for atributo, valor in personaje.items():
+                if atributo != '_id':
                     all_personajes += f"- {atributo}: {valor}\n"
-            await ctx.send(all_personajes)
-        else:
-            await ctx.send("No hay personajes creados.")
+        await ctx.send(all_personajes)
     except Exception as e:
         await ctx.send(f"Ocurrió un error al visualizar todos los personajes: {e}")
 
 @app.route('/')
 def api_ver_todos():
     try:
-        if personajes:
-            all_personajes = []
-            for nombre, atributos in personajes.items():
-                all_personajes.append({"id": nombre, "atributos": atributos})
-            return jsonify(all_personajes), 200
-        else:
-            return jsonify({"message": "No hay personajes creados."}), 200
+        personajes = collection.find()
+        all_personajes = []
+        for personaje in personajes:
+            personaje_data = {key: value for key, value in personaje.items() if key != '_id'}
+            all_personajes.append({"id": personaje['nombre'], "atributos": personaje_data})
+        return jsonify(all_personajes), 200
     except Exception as e:
         return jsonify({"error": f"Ocurrió un error al visualizar todos los personajes: {str(e)}"}), 500
 
